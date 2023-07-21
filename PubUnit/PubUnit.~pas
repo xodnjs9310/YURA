@@ -1,0 +1,1268 @@
+unit PubUnit;
+
+interface
+
+uses
+  Messages, Windows, ComObj, Sysutils, stdctrls, Forms, Variants, Classes,
+  Mask, Grids, Dialogs, ComCtrls, Buttons, IniFiles, DateUtils,TntClasses, Printers;
+
+const
+  hsMyIniFile = 'YTPOP.ini';
+  hsMyConnect = 'TYTPOPConnect';
+  hsMyMain    = 'TYTPOPMainFrm';
+
+  procedure TransFormat(TrCode: integer; Packet : integer; wnn : THandle; NextValue : string; SQLGu : integer; RecvData: string);
+  procedure TransFormat2(TrCode: integer; Packet : integer; wnn : THandle; NextValue : string; SQLGu : integer; RecvData: string);
+  procedure hsRealSend(rData : string);
+  procedure hsCallBoJun(rData : string);
+  procedure hsCallBigadong(rData : string);
+  procedure hsCallMsg(rData : string);
+  procedure hsBigadongEnd(rData : string);
+  procedure hsQlt_B(rData : string);
+  procedure GetUserData(wnn : THandle);
+  procedure ClearGrid(sGrid : TStringGrid);
+  procedure Grid2Excel(sGrid : TStringGrid);
+  procedure ClearFields(aFrm : TForm);  // 입력창 초기화.
+  procedure HideEdit(aFrm : TForm);
+  procedure ShowEdit(aFrm : TForm; sData : string);
+  function VBSpace(szSrc : Integer) : String; // Space 함수
+  function NumericCheck(Key : Char; Gu : integer) : Boolean; // 숫자인지 확인(입력시점)
+  function isNum(S : String) : Boolean; // 숫자인지 확인(최종 결정)
+  function isNum2(S : String) : Boolean; // 숫자인지 확인(최종 결정) --> 소숫점 허용안함
+  function VBright(const s:string;cnt:integer):string; // Right 함수
+  function StrToLength(inStr : string; Len : integer; Gubun : integer; inChar : string) : string; // 원하는 문자의 크기로 채워주는 함수
+  function VBLeft(const s:string; cnt:integer):string; // Left 함수
+  function TrimChr(szSrc : String; Com_CHAR : string) : String; // 원하는 문자 없애는 함수
+  function IsDate(Nal : String) : Boolean; // 맞는 날짜인지 확인하는 함수
+  function Replace(sData : String; oldData : string; newData : string) : string; // 문자열 바꾸기
+  function Str2Num(sData : string) : string; // 숫자(금액 또는 수량) 형식으로
+  function NalJa(sData : string) : string; // 날짜 형식으로
+  function TrimA(szSrc : String) : String;  // 문장안에 있는 공백 없애기
+  function StrToFloatDef(const S: string; Default: Extended): Extended;
+  function StrChk(sData : string) : string;
+  function InChk(sData,MData : string) : boolean;
+  function FindCombo(cbo : TComboBox; rData : string) : integer;
+  function GetCheckSumASTM(pTxText : string) : string;
+  function GetLastdayOfMonth( ADate : TDateTime ) : TDateTime; // 해당월의 마지막날짜 구하기
+  function HangulCheck(rData : string) : boolean; // 문장에 한글이 포함되어 있는지 확인
+  function LastPos(Substr: string; S: string): integer;
+  procedure winDelay(msectime : Cardinal);
+  procedure MakeLogFile(gPath,S: String);
+  procedure GetFormHandle(wnn : THandle; rData : string);
+  function GetHandle(cClassName : string; ShowChk : boolean = True) : THandle;
+  procedure CallTr(sTR : string; cClassName : string; sData : string);
+  function ReverseString(const AText: string): string;  // Delphi 7.0에 있는 함수
+//  function MsgDlg(nCode: integer; nDlType : TMsgDlgType; nType : word; nParam : string = '') : integer;
+  function MsgDlg(nCode: integer; nDlType : TMsgDlgType; nType : word; nParam : string = ''; addParam : string = '') : integer;
+  function GetEQData(cbo : TComboBox; rData : string) : integer;
+  function GetEQData1(cbo : TComboBox; rData : string) : integer;
+  function CrtTr(aTr : string; aData : string) : string;
+  function GetComboData(rData : string; Cnt : integer; Cmb : TComboBox) : string;
+  procedure CallMyDll(rData : string);
+  function Get_BreakTime(sTime, eTime : string) : integer;
+  function Set_ETime(eTime : string) : string;
+  function Set_STime(sTime : string) : string;
+  function MyDayOfWeek(MyDate : TDateTime) : string;
+  function HSTime(sTime : TDateTime) : TDateTime;
+  function IsDigit(ch : Char): Boolean;
+  procedure hsCallRefresh(rData : string);
+  procedure GetUPBarcode(rData : string; var xxUPCode : string; var xxCirNo : string; var xxQty : string; var xxDanwi : string; var xxSN : string);
+  function GetStrCount(TData, SData: string): Integer;
+  function SubStr(Str:string;const Position:integer;const Delimiter:string=','):string;   
+  function GetMyName : Widestring;
+  procedure HSDelimited(const sl : TTntStrings; const value : string; const delimiter : char=';');
+  procedure HSDelimited2(const sl : TTntStrings; const value : string; const delimiter : char=';');    
+  function FastCharPos(const aSource : string; const C: Char; StartPos : Integer): Integer;   
+  function IsIntCheck(const S: string): boolean; 
+  function Str2Int(Str : string) : string;
+  function Str2Float(Str : string; Len : integer=2) : string;
+  function Str2Float2(Str : string; Len : integer=2) : string; // Str2Float('1234.5',5);     
+  function SysThousandSeparator : string;
+  function DeleteThousandSeparator(st : string): string; 
+  function StringToFloatDef(st : string; sDefault: Extended): Extended;
+  function SysDecimalSeparator : string;
+
+  
+  procedure SetDefaultPrinter(PrinterName: string);
+
+implementation
+
+uses PubHeader;
+
+procedure TransFormat(TrCode: integer; Packet : integer; wnn : THandle; NextValue : string; SQLGu : integer; RecvData: string); // TrCode,Packet(01:IP할당),핸들,Next구분,SQL구분,데이타
+var
+    PackSt : string;
+    QueryData : TQueryData; // 공통헤더
+    SendData : string;
+    DataBuf : TCopyDataStruct;
+    ToLen : integer;
+    SndMsg : string;
+    Tmp : string;
+    SQL_Gu : string;
+begin
+    PackSt := Chr(Packet);
+    SQL_Gu := Chr(SQLGu);
+    FillChar(QueryData,SizeOf(QueryData),#32);
+//    Move(TrCode[1],QueryData.TrCd,Length(TrCode));
+    QueryData.TrCd := TrCode;
+    Move(PackSt[1],QueryData.PacketID,Length(PackSt));
+    Move(NextValue[1],QueryData.BeAf,Length(NextValue));
+    Move(SQL_Gu[1],QueryData.SQLGu,Length(SQL_Gu));
+    QueryData.WinID := wnn;
+
+    ToLen := SizeOf(QueryData) + Length(RecvData);
+    SetLength(SendData, SizeOf(QueryData));
+    Move(QueryData,SendData[1],SizeOf(QueryData));
+
+    SetLength(SndMsg, 4 + ToLen);
+    Move(ToLen, SndMsg[1], 4);
+    Tmp := SendData + RecvData;
+    Move(Tmp[1], SndMsg[5], ToLen);
+    with DataBuf do begin
+        DwData := 5000;
+        cbData := Length(SndMsg);
+        lpData := @SndMsg[1];
+    end;
+    SendMessage(FindWindow(hsMyConnect,nil),WM_COPYDATA,wnn,longint(@DataBuf));
+end;
+
+procedure TransFormat2(TrCode: integer; Packet : integer; wnn : THandle; NextValue : string; SQLGu : integer; RecvData: string); // TrCode,Packet(01:IP할당),핸들,Next구분,SQL구분,데이타
+var
+    PackSt : string;
+    QueryData : TQueryData; // 공통헤더
+    SendData : string;
+    DataBuf : TCopyDataStruct;
+    ToLen : integer;
+    SndMsg : string;
+    Tmp : string;
+    SQL_Gu : string;
+begin
+    PackSt := Chr(Packet);
+    SQL_Gu := Chr(SQLGu);
+    FillChar(QueryData,SizeOf(QueryData),#32);
+//    Move(TrCode[1],QueryData.TrCd,Length(TrCode));
+    QueryData.TrCd := TrCode;
+    Move(PackSt[1],QueryData.PacketID,Length(PackSt));
+    Move(NextValue[1],QueryData.BeAf,Length(NextValue));
+    Move(SQL_Gu[1],QueryData.SQLGu,Length(SQL_Gu));
+    QueryData.WinID := wnn;
+
+    ToLen := SizeOf(QueryData) + Length(RecvData);
+
+    SetLength(SendData, SizeOf(QueryData));
+    Move(QueryData,SendData[1],SizeOf(QueryData));
+
+    SetLength(SndMsg, 4 + ToLen);
+    Move(ToLen, SndMsg[1], 4);
+    Tmp := SendData + RecvData;
+    Move(Tmp[1], SndMsg[5], ToLen);
+    with DataBuf do begin
+        DwData := 5001;
+        cbData := Length(SndMsg);
+        lpData := @SndMsg[1];
+    end;
+    SendMessage(FindWindow(hsMyConnect,nil),WM_COPYDATA,wnn,longint(@DataBuf));
+end;
+
+procedure hsCallRefresh(rData : string);
+begin
+    TransFormat2(00415,$90,0,'',$05,rData);
+end;
+
+procedure hsRealSend(rData : string);
+begin
+    TransFormat2(700000,$90,0,'',$05,rData);
+end;
+
+procedure hsCallBoJun(rData : string);
+begin
+    TransFormat2(98110,$90,0,'',$05,rData);
+end;
+
+procedure hsCallMsg(rData : string);
+begin
+    TransFormat2(98120,$90,0,'',$05,rData);
+end;
+
+procedure hsCallBigadong(rData : string);
+begin
+    TransFormat2(00410,$90,0,'',$05,rData);
+end;
+
+procedure hsBigadongEnd(rData : string);
+begin
+    TransFormat2(00413,$90,0,'',$05,rData);
+end;
+
+procedure hsQlt_B(rData : string);
+begin
+    TransFormat2(33100,$90,0,'',$05,rData);
+end;
+
+procedure GetUserData(wnn : THandle);
+var
+    DataBuf : TCopyDataStruct;
+    SndMsg : string;
+begin
+    SndMsg := 'AA';
+    with DataBuf do begin
+        DwData := 3000;
+        cbData := Length(SndMsg);
+        lpData := @SndMsg[1];
+    end;
+    SendMessage(FindWindow(hsMyMain,nil),WM_COPYDATA,wnn,longint(@DataBuf));
+end;
+
+procedure GetFormHandle(wnn : THandle; rData : string);
+var
+    DataBuf : TCopyDataStruct;
+begin
+    with DataBuf do begin
+        DwData := 55055;
+        cbData := Length(rData);
+        lpData := @rData[1];
+    end;
+    SendMessage(FindWindow(hsMyMain,nil),WM_COPYDATA,wnn,longint(@DataBuf));
+end;
+
+function GetHandle(cClassName : string; ShowChk : boolean = True) : THandle;
+var
+    wnn : THandle;
+    i : integer;
+begin
+    wnn := 0;
+    for i := 0 to Screen.FormCount -1 do begin
+        if Screen.Forms[i].ClassName = cClassName then begin
+            wnn := Screen.Forms[i].Handle;
+            if ShowChk = True then begin
+                Screen.Forms[i].Show;
+            end;
+            break;
+        end;
+    end;
+    Result := wnn;
+end;
+
+procedure CallTr(sTR : string; cClassName : string; sData : string);
+var
+    wnn : THandle;
+    DataBuf : TCopyDataStruct;
+    SendData : string;
+begin
+    SendData := sData;
+    wnn := GetHandle(cClassName);
+    if wnn = 0 then begin
+        SendData := sTR + ';' + SendData;
+        with DataBuf do begin
+            DwData := 3898;
+            cbData := Length(SendData);
+            lpData := @SendData[1];
+        end;
+        SendMessage(FindWindow(hsMyMain,nil),WM_COPYDATA,0,longint(@DataBuf));
+    end else begin
+        with DataBuf do begin
+            DwData := 5874;
+            cbData := Length(SendData);
+            lpData := @SendData[1];
+        end;
+        SendMessage(wnn,WM_COPYDATA,0,longint(@DataBuf));
+    end;
+end;
+
+procedure ClearGrid(sGrid : TStringGrid);
+var
+    i,j : integer;
+begin
+    for i := 0 to sGrid.ColCount -1 do begin
+        for j := 1 to sGrid.RowCount -1 do begin
+            sGrid.Cells[i,j] := '';
+        end;
+    end;
+end;
+
+procedure Grid2Excel(sGrid : TStringGrid);
+var
+    xCol, yRow : integer;
+    i, j : integer;
+    RCnt, CCnt : integer;
+    oXL, oWB, oSheet, VArray : Variant;
+begin
+    oXL := CreateOleObject('Excel.Application');
+    oXL.Visible := True;
+
+    oWB := oXL.Workbooks.Add;
+    oSheet := oWB.ActiveSheet;
+
+
+    xCol := sGrid.ColCount -1;
+    yRow := sGrid.RowCount -1;
+
+    VArray := VarArrayCreate([0,yRow,0,xCol],varVariant);
+
+    for i := 1 to xCol+1 do begin
+        for j := 1 to yRow do begin
+            VArray[j-1,i-1] := sGrid.Cells[i-1,j];
+        end;
+    end;
+
+    RCnt := sGrid.RowCount;
+    CCnt := sGrid.ColCount;
+
+//    oSheet.Range['A1',CHR(64 + CCnt) + IntToStr(RCnt)] := VArray;
+    oSheet.Range[oSheet.Cells[1,1],oSheet.Cells[RCnt, CCnt]].Value := VArray; // 2004.02.06
+
+    oXL.Visible := True;
+    oXL.UserControl := True;
+end;
+
+function VBSpace(szSrc : Integer) : String; // Space 함수
+var
+    S_Char : String;
+    C_Char : String;
+    i : Integer;
+begin
+    s_Char := ' ';
+    for i:= 1 to szSrc do begin
+        C_Char := C_Char + s_Char;
+    end;
+    result := C_Char;
+end;
+
+function NumericCheck(Key : Char; Gu : integer) : Boolean; // 숫자인지 확인(입력시점)
+begin
+    result := False;
+    if Gu = 0 then begin
+        if (Key in [#48..#57, #13, #8]) then begin
+            result := False;
+        end else begin
+            result := True;
+        end;
+    end else if Gu = 1 then begin
+        if (Key in [#48..#57, #13, #8, '.', '-']) then begin
+            result := False;
+        end else begin
+            result := True;
+        end;
+    end else if Gu = 2 then begin
+        if (Key in [#48..#57, #13, #8, '.']) then begin
+            result := False;
+        end else begin
+            result := True;
+        end;
+    end else if Gu = 3 then begin
+        if (Key in [#48..#57, #13]) then begin
+            result := False;
+        end else begin
+            result := True;
+        end;
+    end;
+end;
+
+function isNum(S : String) : Boolean; // 숫자인지 확인(최종 결정)
+var
+    v, code : integer;
+begin
+    S := Trim(S);
+    S := TrimChr(S,'.');
+    Val(S, v, Code); // Code : 문자가 시작되는 위치, v : 숫자만 추려 내는것(시작 부분만)
+    if v > 0 then begin
+    end;
+    Result := (Code = 0);
+end;
+
+
+function isNum2(S : String) : Boolean; // 숫자인지 확인(최종 결정) -> 소숫점 허용 안함
+var
+    v, code : integer;
+begin
+    S := Trim(S);
+    S := TrimChr(S,',');
+    Val(S, v, Code); // Code : 문자가 시작되는 위치, v : 숫자만 추려 내는것(시작 부분만)
+    if v > 0 then begin
+    end;
+    Result := (Code = 0);
+end;
+
+function vbright(const s:string;cnt:integer):string; // Right 함수
+begin
+    result:=copy(s,length(s)-cnt+1,cnt);
+end;
+
+function StrToLength(inStr : string; Len : integer; Gubun : integer; inChar : string) : string; // 원하는 문자의 크기로 채워주는 함수
+var
+    i : integer;
+begin
+    Case Gubun of
+        0 : begin
+                if Length(inStr) < Len then begin
+                    for i := Length(inStr) + 1 to Len do begin
+                        inStr := inChar + inStr;
+                    end;
+                end;
+                Result := inStr;
+            end;
+        1 : begin
+                if Length(inStr) < Len then begin
+                    for i := Length(inStr) + 1 to Len do begin
+                        inStr := inStr + inChar;
+                    end;
+                end;
+                Result := inStr;
+            end;
+    end;
+end;
+
+function StrToFloatDef(const S: string; Default: Extended): Extended;
+var
+    Value: Extended;
+begin
+    if TextToFloat(PChar(S), Value, fvExtended) then Result := Value
+    else Result := Default;
+end;
+
+function VBLeft(const s : string; cnt : integer) : string; // Left 함수
+begin
+    result := Copy(s,1,cnt);
+end;
+
+function TrimChr(szSrc : String; Com_CHAR : string) : String; // 원하는 문자 없애는 함수
+var
+    nCurPos : Integer;
+begin
+    nCurPos := Pos(Com_CHAR, szSrc);
+    While nCurPos > 0 do begin
+        Delete(szSrc, nCurPos, 1);
+        nCurPos := Pos(Com_CHAR, szSrc);
+    end;
+    result := szSrc;
+end;
+
+function IsDate(Nal : String) : Boolean; // 맞는 날짜인지 확인하는 함수
+const
+    Month : array[1..12] of integer
+          = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31);
+var
+    nYear : integer;
+    nMonth : integer;
+    nDay : integer;
+    NalJa : integer;
+begin
+    result := True;
+
+    if Length(TrimChr(Nal,' ')) > 8 then begin
+        result := False;
+        exit;
+    end;
+
+    nYear := StrToInt(Copy(Nal,1,4));
+    nMonth := StrToInt(Copy(Nal,5,2));
+    nDay := StrToInt(Copy(Nal,7,2));
+
+    if (nMonth < 1) or (nMonth > 12) then begin
+        result := False;
+        exit;
+    end;
+
+    if nMonth <> 2 then begin
+        NalJa := Month[nMonth];
+    end else begin
+        if (nYear Mod 4 = 0) and ((nYear Mod 100 <> 0) or (nYear Mod 400 = 0)) then begin
+            NalJa := 29;
+        end else begin
+            NalJa := Month[nMonth];
+        end;
+    end;
+
+    if nDay > NalJa then begin
+        result := False;
+        exit;
+    end;
+end;
+
+function Replace(sData : String; oldData : string; newData : string) : string; // 문자열 바꾸기
+begin
+    Result := StringReplace(sData, oldData, newData, [rfReplaceAll]);
+end;
+
+function Str2Num(sData : string) : string; // 숫자(금액 또는 수량) 형식으로
+var
+    Tmp : string;
+begin
+    Tmp := Format('%.0n', [StrToFloat(sData)]);
+    if Tmp = '0' then begin
+        Result := '';
+    end else begin
+        Result := Tmp;
+    end;
+end;
+
+function NalJa(sData : string) : string; // 날짜 형식으로
+begin
+    if sData = '00000000' then begin
+        Result := '';
+    end else begin
+        Result := Copy(sData,1,4) + '-' + Copy(sData,5,2) + '-' + Copy(sData,7,2);
+    end;
+end;
+
+procedure ClearFields(aFrm : TForm);  // 입력창 초기화.
+var
+    i : Integer;
+begin
+    for i := 0 to aFrm.ComponentCount-1 do begin
+        if aFrm.Components[i] is TEdit then begin
+            (aFrm.Components[i] AS TEdit).Text := '';
+//        end else if aFrm.Components[i] is TAdvEdit then begin
+//            (aFrm.Components[i] AS TAdvEdit).Text := '0';
+        end else if aFrm.Components[i] is TMaskEdit then begin
+            (aFrm.Components[i] AS TMaskEdit).Text := '';
+{        end else if COMPONENTS[i] is TPanel then begin
+            if ((COMPONENTS[i] AS TPanel).Name <> 'pnTab') and ((COMPONENTS[i] AS TPanel).Name <> 'StaticText2') and ((COMPONENTS[i] AS TPanel).Name <> 'BPnl2') then begin // Tab 창의 제목 넣는 부분
+                (COMPONENTS[i] AS TPanel).Caption := '';
+            end;
+        end else if COMPONENTS[i] is TLabel then begin
+            (COMPONENTS[i] AS TLabel).Visible := True;
+        end else if COMPONENTS[i] is TComboBox then begin
+            if ((COMPONENTS[i] AS TComboBox).Name <> 'ComboBox1') and ((COMPONENTS[i] AS TComboBox).Name <> 'ComboBox12') and ((COMPONENTS[i] AS TComboBox).Name <> 'ComboBox13') and ((COMPONENTS[i] AS TComboBox).Name <> 'ComboBox15') and ((COMPONENTS[i] AS TComboBox).Name <> 'ComboBox16') then begin
+                (COMPONENTS[i] AS TComboBox).Clear;
+            end;
+            if ((COMPONENTS[i] AS TComboBox).Name <> 'ComboBox25')  then begin
+                (COMPONENTS[i] AS TComboBox).Visible := True;
+            end;
+}
+        end;
+    end;
+end;
+
+procedure HideEdit(aFrm : TForm);
+var
+    i : Integer;
+begin
+    for i := 0 to aFrm.ComponentCount-1 do begin
+        if aFrm.Components[i] is TEdit then begin
+            if Length(Trim((aFrm.Components[i] as TEdit).Hint)) > 0 then begin
+                (aFrm.Components[i] as TEdit).Visible := False;
+            end;
+        end else if aFrm.Components[i] is TSpeedButton then begin
+            if Length(Trim((aFrm.Components[i] as TSpeedButton).Hint)) > 0 then begin
+                (aFrm.Components[i] as TSpeedButton).Visible := False;
+            end;
+        end else if aFrm.Components[i] is TComboBox then begin
+            if Length(Trim((aFrm.Components[i] as TComboBox).Hint)) > 0 then begin
+                (aFrm.Components[i] as TComboBox).Visible := False;
+            end;
+        end;
+    end;
+end;
+
+procedure ShowEdit(aFrm : TForm; sData : string);
+var
+    i : integer;
+begin
+    for i := 0 to aFrm.ComponentCount-1 do begin
+        if aFrm.Components[i] is TEdit then begin
+            if Trim((aFrm.Components[i] as TEdit).Hint) = sData then begin
+                (aFrm.Components[i] as TEdit).Visible := True;
+            end;
+        end else if aFrm.Components[i] is TSpeedButton then begin
+            if Trim((aFrm.Components[i] as TSpeedButton).Hint) = sData then begin
+                (aFrm.Components[i] as TSpeedButton).Visible := True;
+            end;
+        end else if aFrm.Components[i] is TComboBox then begin
+            if Trim((aFrm.Components[i] as TComboBox).Hint) = sData then begin
+                (aFrm.Components[i] as TComboBox).Visible := True;
+            end;
+        end;
+    end;
+end;
+
+function TrimA(szSrc : String) : String;  // 문장안에 있는 공백 없애기
+var
+    Com_CHAR : String;
+    nCurPos : Integer;
+begin
+    Com_CHAR := ' ';
+    nCurPos := Pos(Com_CHAR, szSrc);  // Pos(찾을 단어, 찾으려는 문장)
+    While nCurPos > 0 do begin
+        Delete(szSrc, nCurPos, 1); // szSrc문장에서 nCurPos위치부터 1자리를 삭제해서 szSrc로 저장
+        nCurPos := Pos(Com_CHAR, szSrc);
+    end;
+    TrimA := szSrc;
+end;
+
+function StrChk(sData : string) : string;
+begin
+    if Length(Trim(sData)) = 0 then begin
+        Result := VBSpace(1);
+    end else begin
+        Result := Trim(sData);
+    end;
+end;
+
+function InChk(sData,MData : string) : boolean;
+begin
+    Result := False;
+    if Length(Trim(sData)) = 0 then begin
+        Result := True;
+        MessageDlg(MData + ' 을(를) 입력하세요', mtError,[mbOk], 0);
+    end;
+end;
+
+function FindCombo(cbo : TComboBox; rData : string) : integer;
+var
+    i : integer;
+begin
+    Result := 0;
+    for i := 0 to cbo.Items.Count do begin
+        if Trim(cbo.Items.Strings[i]) = Trim(rData) then begin
+            Result := i;
+        end;
+    end;
+end;
+
+procedure winDelay(msectime : Cardinal);
+var
+    fcontinue : Boolean;
+    Start : Cardinal;
+begin
+    fcontinue := True;
+    Start := GetTickCount;
+    while fcontinue do begin
+        Application.ProcessMessages;
+        if Start + msectime < GetTickCount then fcontinue := False
+    end;
+end;
+
+procedure MakeLogFile(gPath,S: String);
+var
+    F : Integer;
+begin
+    if gPath[Length(gPath)] <> '\' then gPath := gPath + '\';
+    if FileExists(gPath + 'LogFile.Txt') then
+        F := FileOpen(gPath + 'LogFile.Txt', fmOpenWrite or fmShareDenyWrite)
+    else F := FileCreate(gPath + 'LogFile.Txt');
+
+try
+    FileSeek(F,0,2);
+    S := S + #13 + #10;
+    FileWrite(F,S[1],Length(S));
+finally
+    FileClose(F);
+end;
+end;
+
+function GetCheckSumASTM(pTxText : string) : string;
+var
+    i, vTotalDecimal, vModDecimal : integer;
+    vHex : string;
+begin
+    vTotalDecimal := 0;
+    for i := 1 to Length(pTxText) do begin
+        vTotalDecimal := vTotalDecimal + Ord(pTxText[i]);
+    end;
+    vModDecimal := vTotalDecimal mod 256;
+    vHex := IntToHex(vModDecimal,2);
+    Result := vHex;
+end;
+
+function LastPos(Substr: string; S: string): integer;
+var
+    sTmp : string;
+    iLastPos : integer;
+begin
+    sTmp := S;
+    iLastPos := Pos(Substr, sTmp);
+    if iLastPos > 0 then begin
+        sTmp := Copy(sTmp, iLastPos + 1, 999);
+        while Pos(Substr, sTmp) > 0 do begin
+            iLastPos := iLastPos + Pos(Substr, sTmp);
+            sTmp := Copy(sTmp, Pos(Substr, sTmp)+1, 999);
+        end;
+    end;
+    Result := iLastPos;
+end;
+
+function GetLastdayOfMonth( ADate : TDateTime ) : TDateTime;
+var
+    Year, Month, Day : Word;
+begin
+    DecodeDate(ADate, Year, Month, Day );
+    Month := Month + 1;
+    if Month > 12 then begin
+        Month := 1;
+        Year := Year+1;
+    end;
+    Result := EncodeDate(Year, Month, 1) - 1;
+end;
+
+function HangulCheck(rData : string) : boolean;
+var
+    i : integer;
+begin
+    result := False;
+    for i := 1 to Length(rData) do begin
+        if IsDBCSLeadByte(Byte(rData[i])) then begin
+            result := True;
+            break;
+        end;
+    end;
+end;
+
+function ReverseString(const AText: string): string;  // Delphi 7.0에 있는 함수
+var
+    i : Integer;
+    P : PChar;
+begin
+    SetLength(Result, Length(AText));
+    P := PChar(Result);
+    for i := Length(AText) downto 1 do begin
+        P^ := AText[i];
+        Inc(P);
+    end;
+end;
+{
+function MsgDlg(nCode: integer; nDlType : TMsgDlgType; nType : word; nParam : string = '') : integer;
+var
+    CodeList : TStringList;
+    TempList : TStringList;
+    TempCode : string;
+    TempMsg : string;
+    i,j : integer;
+    PathName : string;
+begin
+    PathName := ExtractFilePath(Application.ExeName);
+    Result := 0;
+    CodeList := TStringList.Create;
+    TempList := TStringList.Create;
+  try
+    CodeList.Clear;
+    TempList.Clear;
+    if not FileExists(PathName + 'scr\Message.dat') then begin
+        exit;
+    end;
+    CodeList.LoadFromFile(PathName + 'scr\Message.dat');
+    TempCode := FormatFloat('00000',nCode);
+    for i := 0 to CodeList.Count -1 do begin
+        if TempCode = Copy(Trim(CodeList.Strings[i]),1,5) then begin
+            TempMsg := Trim(Copy(Trim(CodeList.Strings[i]),7,200));
+            if Length(Trim(nParam)) > 0 then begin
+                TempList.CommaText := nParam;
+                for j := 0 to TempList.Count -1 do begin
+                    TempMsg := StringReplace(TempMsg, '%!', TempList.Strings[j], [rfIgnoreCase]);
+                end;
+            end;
+            if nType = 1 then begin
+                MessageDlg(TempMsg, nDlType,[mbOk], 0);
+            end else if nType = 2 then begin
+                Result := MessageDlg(TempMsg, mtInformation,[mbYes, mbNo], 0);
+            end;
+            break;
+        end;
+    end;
+  finally
+    FreeAndNil(TempList);
+    FreeAndNil(CodeList);
+  end;
+end;
+}
+
+
+function MsgDlg(nCode: integer; nDlType : TMsgDlgType; nType : word; nParam : string = ''; addParam : string = '') : integer;
+var
+    CodeList : TStringList;
+    TempList : TStringList;
+    TempCode : string;
+    TempMsg : string;
+    i,j : integer;
+    PathName : string;
+    WinIni : TIniFile;
+    LanguageChk : integer;
+    FileName : string;
+begin
+    PathName := ExtractFilePath(Application.ExeName);
+    Result := 0;
+    CodeList := TStringList.Create;
+    TempList := TStringList.Create;
+
+    WinIni := TIniFile.Create(PathName + hsMyIniFile);
+    LanguageChk := WinIni.ReadInteger('SETTING','LANGUAGE',0);
+    FreeAndNil(WinIni);
+
+  try
+    CodeList.Clear;
+    TempList.Clear;
+
+    if LanguageChk = 0 then begin
+        FileName := PathName + 'scr\Message.dat'; //Korean
+    end else if LanguageChk = 1 then begin
+        FileName := PathName + 'chscr\Message.dat'; //Chinese
+    end;
+
+    if not FileExists(FileName) then begin
+        exit;
+    end;
+
+    CodeList.LoadFromFile(FileName);
+    
+    TempCode := FormatFloat('00000',nCode);
+    for i := 0 to CodeList.Count -1 do begin
+        if TempCode = Copy(Trim(CodeList.Strings[i]),1,5) then begin
+            TempMsg := Trim(Copy(Trim(CodeList.Strings[i]),7,200));
+            if Length(Trim(nParam)) > 0 then begin
+               TempList.CommaText := nParam;
+                for j := 0 to TempList.Count -1 do begin
+                    TempMsg := StringReplace(addParam + TempMsg, '%!', TempList.Strings[j], [rfIgnoreCase]);
+                end;
+            end;
+            if nType = 1 then begin
+                MessageDlg(addParam + TempMsg, nDlType,[mbOk], 0);
+            end else if nType = 2 then begin
+                Result := MessageDlg(addParam + TempMsg, mtConfirmation,[mbYes, mbNo], 0);
+            end;
+            break;
+        end;
+    end;
+  finally
+    FreeAndNil(TempList);
+    FreeAndNil(CodeList);
+  end;
+end;
+
+function GetEQData(cbo : TComboBox; rData : string) : integer;
+var
+    i : integer;
+begin
+    result := 0;
+    for i := 0 to cbo.Items.Count -1 do begin
+        if Trim(cbo.Items.Strings[i]) = Trim(rData) then begin
+            result := i;
+            break;
+        end;
+    end;
+end;
+
+function GetEQData1(cbo : TComboBox; rData : string) : integer;
+var
+    i : integer;
+begin
+    result := -1;
+    for i := 0 to cbo.Items.Count -1 do begin
+        if Copy(Trim(cbo.Items.Strings[i]),1,Pos('.',Trim(cbo.Items.Strings[i]))-1) = Trim(rData) then begin
+            result := i;
+            break;
+        end;
+    end;
+end;
+
+function CrtTr(aTr : string; aData : string) : string;
+var
+    Tmp, Temp : string;
+    i : integer;
+    CrtTrList : TStringList;
+begin
+    Tmp := StringReplace(aData, ';;', '; ;', [rfReplaceAll]);
+    Tmp := StringReplace(Tmp, ';;', '; ;', [rfReplaceAll]);
+
+    CrtTrList := TStringList.Create;
+  try
+    CrtTrList.Clear;
+    ExtractStrings([';'], [], PChar(Tmp), CrtTrList);
+    for i := 0 to CrtTrList.Count -1 do begin
+        Temp := Temp + CrtTrList.Strings[i] + ''',''';
+    end;
+    Temp := 'EXEC TR_' + aTr + ' ''' + Temp;
+    Temp := Copy(Temp,1,Length(Temp)-2);
+    Result := Temp;
+  finally
+    FreeAndNil(CrtTrList);
+  end;
+end;
+
+function GetComboData(rData : string; Cnt : integer; Cmb : TComboBox) : string;
+var
+    i : integer;
+begin
+    Result := '';
+    for i := 0 to Cmb.Items.Count -1 do begin
+        if Trim(Copy(Cmb.Items.Strings[i],1,Cnt)) = Trim(rData) then begin
+            Result := Trim(Cmb.Items.Strings[i]);
+            break;
+        end;
+    end;
+end;
+
+procedure CallMyDll(rData : string);
+var
+    DataBuf : TCopyDataStruct;
+begin
+    with DataBuf do begin
+        DwData := 3899;
+        cbData := Length(rData);
+        lpData := @rData[1];
+    end;
+    SendMessage(FindWindow(hsMyMain,nil),WM_COPYDATA,0,longint(@DataBuf));
+end;
+
+function Get_BreakTime(sTime, eTime : string) : integer;
+var
+    M : integer;
+begin
+    M := 0;
+    if (sTime <= '01:30') and (eTime > '02:00') then begin
+        M := M + 30;
+    end;
+    if (sTime <= '04:00') and (eTime > '04:10') then begin
+        M := M + 10;
+    end;
+    if (sTime <= '06:00') and (eTime > '06:10') then begin
+        M := M + 10;
+    end;
+    if (sTime <= '10:20') and (eTime > '10:30') then begin
+        M := M + 10;
+    end;
+    if (sTime <= '12:30') and (eTime > '13:30') then begin
+        M := M + 60;
+    end;
+    if (sTime <= '15:10') and (eTime > '15:20') then begin
+        M := M + 10;
+    end;
+    if (sTime <= '17:10') and (eTime > '17:40') then begin
+        M := M + 30;
+    end;
+    if (sTime <= '19:40') and (eTime > '19:50') then begin
+        M := M + 10;
+    end;
+    if (sTime <= '23:30') and (eTime > '23:40') then begin
+        M := M + 10;
+    end;
+    Result := M;
+end;
+
+function Set_STime(sTime : string) : string;
+var
+    Temp : string;
+begin
+    Temp := sTime;
+    if (sTime >= '01:30') and (sTime <= '02:00') then begin
+        Temp := '02:00';
+    end else if (sTime >= '04:00') and (sTime <= '04:10') then begin
+        Temp := '04:10';
+    end else if (sTime >= '06:00') and (sTime <= '06:10') then begin
+        Temp := '06:10';
+    end else if (sTime >= '10:20') and (sTime <= '10:30') then begin
+        Temp := '10:30';
+    end else if (sTime >= '12:30') and (sTime <= '13:30') then begin
+        Temp := '13:30';
+    end else if (sTime >= '15:10') and (sTime <= '15:20') then begin
+        Temp := '15:20';
+    end else if (sTime >= '17:10') and (sTime <= '17:40') then begin
+        Temp := '17:40';
+    end else if (sTime >= '19:40') and (sTime <= '19:50') then begin
+        Temp := '19:50';
+    end else if (sTime >= '23:30') and (sTime <= '23:40') then begin
+        Temp := '23:40';
+    end;
+    Result := Temp;
+end;
+
+function Set_ETime(eTime : string) : string;
+var
+    Temp : string;
+begin
+    Temp := eTime;
+    if (eTime >= '01:30') and (eTime <= '02:00') then begin
+        Temp := '01:30';
+    end else if (eTime >= '04:00') and (eTime <= '04:10') then begin
+        Temp := '04:00';
+    end else if (eTime >= '06:00') and (eTime <= '06:10') then begin
+        Temp := '06:00';
+    end else if (eTime >= '10:20') and (eTime <= '10:30') then begin
+        Temp := '10:20';
+    end else if (eTime >= '12:30') and (eTime <= '13:30') then begin
+        Temp := '12:30';
+    end else if (eTime >= '15:10') and (eTime <= '15:20') then begin
+        Temp := '15:10';
+    end else if (eTime >= '17:10') and (eTime <= '17:40') then begin
+        Temp := '17:10';
+    end else if (eTime >= '19:40') and (eTime <= '19:50') then begin
+        Temp := '19:40';
+    end else if (eTime >= '23:30') and (eTime <= '23:40') then begin
+        Temp := '23:30';
+    end;
+    Result := Temp;
+end;
+
+function MyDayOfWeek(MyDate : TDateTime) : string;
+var
+    i : integer;
+begin
+    i := DayOfWeek(MyDate);
+    case i of
+        1 : Result := '(SUN)';
+        2 : Result := '(MON)';
+        3 : Result := '(TUE)';
+        4 : Result := '(WED)';
+        5 : Result := '(THU)';
+        6 : Result := '(FRI)';
+        7 : Result := '(SAT)';
+    end;
+end;
+
+function HSTime(sTime : TDateTime) : TDateTime;
+var
+    MyHour,MyMinute,MySecond,MyMMS : Word;
+    TmpTime : string;
+begin
+    TmpTime := FormatDateTime('hh:mm:ss',sTime);
+    MyHour := StrToInt(Copy(TmpTime,1,2));
+    MyMinute := StrToInt(Copy(TmpTime,4,2));
+    MySecond := StrToInt(Copy(TmpTime,7,2));
+    MyMMS := 0;
+    Result := EncodeTime(MyHour,MyMinute,MySecond,MyMMS);
+end;
+
+function IsDigit(ch : Char): Boolean;
+begin
+    Result := ch in ['0'..'9'];
+end;
+
+procedure GetUPBarcode(rData : string; var xxUPCode : string; var xxCirNo : string; var xxQty : string; var xxDanwi : string; var xxSN : string);
+begin
+    xxUPCode := UpperCase(Copy(rData,1,Pos('#',rData)-1));
+    Delete(rData,1,Pos('#',rData));
+    xxCirNo := UpperCase(Copy(rData,1,Pos('#',rData)-1));
+    Delete(rData,1,Pos('#',rData));
+    xxQty := Copy(rData,1,Pos('#',rData)-1);
+    Delete(rData,1,Pos('#',rData));
+    xxDanwi := UpperCase(Copy(rData,1,Pos('#',rData)-1));
+    Delete(rData,1,Pos('#',rData));
+    xxSN := UpperCase(Trim(rData));
+end;
+
+function GetStrCount(TData, SData: string): Integer;
+begin
+    Result := (Length(TData) - Length(StringReplace(TData, SData, '', [rfReplaceAll]))) div Length(SData);
+end;
+
+//VB SPLIT 함수 동일
+function SubStr(Str:string;const Position:integer;const Delimiter:string=','):string;
+var
+   Strlen,ZeichenIdx,SubIdx,kompos:integer;
+begin
+   Result:='';
+   Str:=Str+Delimiter;
+   StrLen:=Length(Str);
+   ZeichenIdx:=1;
+   SubIdx:=1;
+   While ZeichenIdx<=StrLen do
+   begin
+       KomPos:=Pos(Delimiter,Str);
+   if KomPos<>0 then begin
+      if SubIdx=Position then begin
+         result:=Copy(Str,1,KomPos-1);
+         break;
+      end;
+      delete(Str,1,KomPos);
+      inc(SubIdx);
+   end;
+   inc(ZeichenIdx);
+   end;
+end;
+
+function GetMyName : Widestring;
+var
+    NameList : TStringList;
+    PathName : string;
+begin
+    Result := '';
+    PathName := ExtractFilePath(Application.ExeName);
+    NameList := TStringList.Create;
+    NameList.Clear;
+    if FileExists(PathName + 'IRum.txt') then begin
+        NameList.LoadFromFile(PathName + 'IRum.txt');
+        Result := NameList.Strings[0];
+    end;
+    FreeAndNil(NameList);
+end;
+      
+procedure HSDelimited(const sl : TTntStrings; const value : string; const delimiter : char=';');
+var
+    i,j : integer;
+begin
+    i := 1;
+    while i > 0 do begin
+        j := i;
+        i := FastCharPos(value,delimiter,i);
+        if i > 0 then begin
+            sl.Add(Trim(UTF8Decode(Copy(value,j,i-j))));
+            Inc(i);
+        end;
+    end;
+end;
+
+// without trim
+procedure HSDelimited2(const sl : TTntStrings; const value : string; const delimiter : char=';');
+var
+    i,j : integer;
+begin
+    i := 1;
+    while i > 0 do begin
+        j := i;
+        i := FastCharPos(value,delimiter,i);
+        if i > 0 then begin
+            sl.Add(UTF8Decode(Copy(value,j,i-j)));
+            Inc(i);
+        end;
+    end;
+end;
+       
+function FastCharPos(const aSource : string; const C: Char; StartPos : Integer) : Integer;
+var
+    L : integer;
+begin
+    Assert(StartPos > 0);
+
+    Result := 0;
+    L := Length(aSource);
+    if L = 0 then exit;
+    if StartPos > L then exit;
+    Dec(StartPos);
+    asm
+        PUSH EDI                 //Preserve this register
+
+        mov  EDI, aSource        //Point EDI at aSource
+        add  EDI, StartPos
+        mov  ECX, L              //Make a note of how many chars to search through
+        sub  ECX, StartPos
+        mov  AL,  C              //and which char we want
+      @Loop:
+        cmp  Al, [EDI]           //compare it against the SourceString
+        jz   @Found
+        inc  EDI
+        dec  ECX
+        jnz  @Loop
+        jmp  @NotFound
+      @Found:
+        sub  EDI, aSource        //EDI has been incremented, so EDI-OrigAdress = Char pos !
+        inc  EDI
+        mov  Result,   EDI
+      @NotFound:
+
+        POP  EDI
+    end;
+end;
+      
+function IsIntCheck(const S: string): boolean;
+var
+    P : PChar;
+begin
+    P := PChar(S);
+    Result := False;
+    while P^ <> #0 do begin
+        if not (P^ in ['0'..'9','-']) then exit;
+        Inc(P);
+    end;
+    Result := True;
+end;
+               
+function Str2Int(Str : string) : string;
+begin
+    Result := FormatFloat('#,##0',StrToInt64Def(Str,0));
+end;
+
+function Str2Float(Str : string; Len : integer=2) : string; // Str2Float('1234.5',5);
+var
+    Txt : string;
+    i : integer;
+//    Temp : double;
+begin
+    for i := 1 to Len do begin
+        Txt := Txt + '0';
+    end;
+    Txt := '#,##0.' + Txt;
+//    Temp := StrToFloatDef(Str,0);
+    Result := FormatFloat(Txt,StrToFloatDef(Str,0));
+//    Result := FormatFloat(Txt,Temp); // 아래꺼와 차이 확인
+end;
+
+function Str2Float2(Str : string; Len : integer=2) : string; // Str2Float('1234.5',5);
+var
+    Txt : string;
+    i : integer;
+begin
+    for i := 1 to Len do begin
+        Txt := Txt + '#';
+    end;
+    Txt := '#,##0.' + Txt;
+    Result := FormatFloat(Txt,StrToFloatDef(Str,0));
+end;
+
+function SysThousandSeparator : string;
+var
+    DefaultLCID : Integer;
+begin
+    Result := '';
+
+    DefaultLCID := GetThreadLocale;
+    Result := GetLocaleChar(DefaultLCID, LOCALE_STHOUSAND, ',');
+end;
+
+function DeleteThousandSeparator(st : string): string;
+begin
+    Result := StringReplace(st, SysThousandSeparator, '', [rfReplaceAll]);
+end;
+
+procedure SetDefaultPrinter(PrinterName: string);
+var
+    i : integer;
+    Device: PChar;
+    Driver: PChar;
+    Port: PChar;
+    HdeviceMode: THandle;
+    aPrinter: TPrinter;
+begin
+    Printer.PrinterIndex := -1;
+    GetMem(Device, 255);
+    GetMem(Driver, 255);
+    GetMem(Port, 255);
+    aPrinter := TPrinter.Create;
+  try
+    for i := 0 to Printer.Printers.Count - 1 do begin
+        if Printer.Printers.Strings[i] = PrinterName then begin
+            aprinter.PrinterIndex := i;
+            aPrinter.getprinter(device, driver, port, HdeviceMode);
+            StrCat(Device, ',');
+            StrCat(Device, Driver);
+            StrCat(Device, Port);
+            WriteProfileString('windows', 'device', Device);
+            StrCopy(Device, 'windows');
+            //SendMessage(HWND_BROADCAST, WM_WININICHANGE, 0, Longint(@Device));
+            PostMessage(HWND_BROADCAST, WM_WININICHANGE, 0, Longint(@Device));
+        end;
+    end;
+  finally
+    aPrinter.Free;
+  end;
+    FreeMem(Device, 255);
+    FreeMem(Driver, 255);
+    FreeMem(Port, 255);
+end;
+
+function StringToFloatDef(st : string; sDefault: Extended): Extended;
+begin
+    st := StringReplace(st, '.', SysDecimalSeparator, [rfReplaceAll]);
+    Result := StrToFloatDef(st,sDefault);
+end;
+ 
+function SysDecimalSeparator : string;
+var
+    DefaultLCID : Integer;
+begin
+    Result := '';
+
+    DefaultLCID := GetThreadLocale;
+    Result := GetLocaleChar(DefaultLCID, LOCALE_SDECIMAL, '.');
+end;
+
+end.
+
